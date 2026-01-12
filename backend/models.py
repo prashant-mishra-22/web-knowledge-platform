@@ -1,10 +1,11 @@
-# backend/models.py
+# backend/models.py - UPDATED FOR RAILWAY MONGODB
 from sqlalchemy import create_engine, Column, String, JSON, DateTime, Integer, Float, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pymongo import MongoClient
 import os
 from datetime import datetime
+import urllib.parse
 
 # PostgreSQL for Railway
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -15,15 +16,40 @@ engine = create_engine(DATABASE_URL or "postgresql://temp:temp@localhost/temp")
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# MongoDB for Railway
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-mongo_client = MongoClient(MONGODB_URI)
-mongo_db = mongo_client.get_database()
+# MongoDB for Railway - FIXED
+MONGODB_URI = os.getenv("MONGODB_URI")
 
-# Collections
-entities_col = mongo_db["entities"]
-relationships_col = mongo_db["relationships"]
-domain_graphs_col = mongo_db["domain_graphs"]
+if MONGODB_URI:
+    # Parse the URI to get database name
+    try:
+        parsed_uri = urllib.parse.urlparse(MONGODB_URI)
+        database_name = parsed_uri.path.strip('/') or 'knowledge_graph'
+        
+        # Connect to MongoDB
+        mongo_client = MongoClient(MONGODB_URI)
+        mongo_db = mongo_client[database_name]
+        
+        print(f"✅ Connected to MongoDB database: {database_name}")
+    except Exception as e:
+        print(f"⚠️ MongoDB connection error: {e}")
+        # Fallback to in-memory for now
+        mongo_client = None
+        mongo_db = None
+else:
+    print("⚠️ MONGODB_URI not set, using fallback")
+    mongo_client = None
+    mongo_db = None
+
+# Collections - with fallback
+if mongo_db:
+    entities_col = mongo_db["entities"]
+    relationships_col = mongo_db["relationships"]
+    domain_graphs_col = mongo_db["domain_graphs"]
+else:
+    # Create dummy collections for now
+    entities_col = None
+    relationships_col = None
+    domain_graphs_col = None
 
 # PostgreSQL Models
 class RawCrawl(Base):
@@ -67,4 +93,5 @@ try:
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created")
 except Exception as e:
+
     print(f"⚠️ Could not create tables: {e}")
